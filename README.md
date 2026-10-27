@@ -2,6 +2,15 @@
 
 A matchup-aware League of Legends item build advisor. It's a native C++ desktop app. Start it, start a match, and it reads everything from the game: your champion, role and items, plus the enemy team and what they've bought. It then shows your best options for the next item, both in its window and in a small overlay on top of the game. There's nothing to enter.
 
+![Tolleagle during a game: your next-item options, the enemy threat read and the build order](docs/screenshots/main-window.png)
+
+<p>
+  <img src="docs/screenshots/overlay.png" alt="The in-game overlay with three next-item options, gold left and enemy threats" width="332">
+  <img src="docs/screenshots/waiting.png" alt="Waiting for a game" width="460">
+</p>
+
+*In-game screenshots use the bundled mock game (`tolleagle-mock-live`).*
+
 ```
  LEAGUE GAME CLIENT (while a match runs)       RIOT DATA (no API key)
  ┌──────────────────────────────────┐      ┌───────────────────────────────┐
