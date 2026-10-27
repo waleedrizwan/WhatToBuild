@@ -1,5 +1,7 @@
 # Tolleagle
 
+[![CI](https://github.com/waleedrizwan/WhatToBuild/actions/workflows/ci.yml/badge.svg)](https://github.com/waleedrizwan/WhatToBuild/actions/workflows/ci.yml)
+
 A matchup-aware League of Legends item build advisor. It's a native C++ desktop app. Start it, start a match, and it reads everything from the game: your champion, role and items, plus the enemy team and what they've bought. It then shows your best options for the next item, both in its window and in a small overlay on top of the game. There's nothing to enter.
 
 ![Tolleagle during a game: your next-item options, the enemy threat read and the build order](docs/screenshots/main-window.png)
@@ -89,6 +91,20 @@ The overlay is an ordinary always-on-top window. Nothing is injected into the ga
 LIVE_CLIENT_URL=http://127.0.0.1:2998 ./build/Tolleagle.app/Contents/MacOS/Tolleagle
 ```
 
+### Download
+
+Every push to `main` builds Windows and macOS apps on GitHub Actions. Open the latest [CI run](https://github.com/waleedrizwan/WhatToBuild/actions/workflows/ci.yml) and download **Tolleagle-windows** (a single `tolleagle.exe`) or **Tolleagle-macos** from its Artifacts section. You need to be signed in to GitHub to download them.
+
+## Tests
+
+The unit tests run offline against a small handmade Data Dragon fixture ([tests/fixture.h](tests/fixture.h)). They cover data loading and filtering, champion archetypes, enemy-item reading, team analysis, the build recommendations and Live Client parsing:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+CI runs them on Windows, macOS and Linux for every push and pull request.
+
 ### Engine check
 
 `tolleagle-smoke` prints the recommended builds for a set of sample matchups using live Data Dragon data:
@@ -107,6 +123,8 @@ LIVE_CLIENT_URL=http://127.0.0.1:2998 ./build/Tolleagle.app/Contents/MacOS/Tolle
 | `src/net/` | libcurl GET wrapper |
 | `src/ui/` | Dear ImGui window and async icon cache |
 | `tools/` | Smoke test and mock live-game server |
+| `tests/` | GoogleTest unit tests and the offline Data Dragon fixture |
+| `.github/workflows/ci.yml` | Builds and tests on Windows, macOS and Linux; uploads the apps |
 | `third_party/stb_image.h` | PNG decoding for icons (public domain) |
 
 Data comes from Riot's Data Dragon and the League Live Client Data API. Tolleagle isn't endorsed by Riot Games. The recommendations are heuristics, so use your judgment.

@@ -69,6 +69,13 @@ struct GameData {
 /** Fetches the latest patch's data. Throws std::runtime_error on failure. */
 std::unique_ptr<GameData> loadGameData();
 
+/**
+ * Builds GameData from Data Dragon's champion.json and item.json bodies, keeping only
+ * Summoner's Rift shop items. Throws on malformed JSON.
+ */
+std::unique_ptr<GameData> parseGameData(const std::string& version, const std::string& championJson,
+                                        const std::string& itemJson);
+
 /** Items worth tracking on an enemy: finished items and boots, no starters/consumables. */
 bool isTrackableItem(const Item& item);
 

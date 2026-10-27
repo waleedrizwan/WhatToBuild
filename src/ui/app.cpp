@@ -1,8 +1,10 @@
 #include "ui/app.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 
@@ -121,7 +123,7 @@ float setupStyle(Fonts& fonts, float contentScale, float framebufferScale) {
   // Rasterize at physical pixel size, then draw at logical size, so text is sharp on HiDPI.
   float px = contentScale;
   fonts.body = addFont(SANS, 15 * px);
-  fonts.small = addFont(SANS, 13 * px);
+  fonts.caption = addFont(SANS, 13 * px);
   fonts.bold = addFont(SANS_BOLD, 15 * px);
   fonts.heading = addFont(SERIF_BOLD, 15 * px);
   fonts.title = addFont(SERIF_BOLD, 30 * px);
@@ -234,7 +236,7 @@ void App::frame() {
     ImGui::BeginChild("results", {0, 0});
     drawResults(*snapshot_);
     ImGui::PushTextWrapPos(0);
-    ImGui::PushFont(fonts_.small);
+    ImGui::PushFont(fonts_.caption);
     ImGui::TextDisabled(
         "%s", "Data from Riot Data Dragon and the League Live Client Data API. Tolleagle isn't endorsed by Riot Games. "
               "Recommendations are heuristic — use your judgment.");
@@ -281,16 +283,16 @@ void App::drawOverlay() {
   ImGui::TextColored(rgba(color::gold), "TOLLEAGLE");
   ImGui::PopFont();
   ImGui::SameLine();
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   ImGui::SetCursorPosY(ImGui::GetCursorPosY() + dp(1));
   ImGui::TextDisabled("%s", formatGameTime(status_.game.gameTime).c_str());
   std::string gold = withCommas(snap.goldLeft) + "g left";
-  ImGui::SameLine(width - measure(fonts_.small, gold).x);
+  ImGui::SameLine(width - measure(fonts_.caption, gold).x);
   ImGui::TextColored(rgba(color::gold), "%s", gold.c_str());
   ImGui::PopFont();
   ImGui::Dummy({width, dp(2)});
 
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   ImGui::TextDisabled(build.nextOptions.empty() ? "Your build is complete." : "Options for your next item");
   ImGui::PopFont();
   for (const Pick& p : build.nextOptions) {
@@ -306,14 +308,14 @@ void App::drawOverlay() {
     ImGui::SameLine();
     ImGui::TextColored(rgba(color::gold), "%dg", p.item->gold);
     if (!p.reasons.empty()) {
-      ImGui::PushFont(fonts_.small);
+      ImGui::PushFont(fonts_.caption);
       ImGui::TextDisabled("%s", p.reasons.front().c_str());
       ImGui::PopFont();
     }
     ImGui::EndGroup();
   }
 
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   if (build.boots && !build.boots->owned)
     ImGui::TextDisabled("Boots: %s (%dg)", build.boots->item->name.c_str(), build.boots->item->gold);
   std::vector<std::string> threats;
@@ -367,7 +369,7 @@ void App::drawStatusLine(const LiveStatus& status) {
   std::string text = on ? "Connected · " + formatGameTime(status.game.gameTime) +
                               (status.game.gameMode.empty() ? "" : " · " + status.game.gameMode) + " · updates every 5s"
                         : status.message;
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   ImVec2 p = ImGui::GetCursorScreenPos();
   float r = dp(4);
   ImGui::GetWindowDrawList()->AddCircleFilled({p.x + r, p.y + ImGui::GetTextLineHeight() / 2}, r,
@@ -415,19 +417,19 @@ void App::drawYouPanel(const Game& game, const LiveStatus& status) {
   ImGui::PushFont(fonts_.big);
   ImGui::TextColored(rgba(color::goldBright), "%s", game.you->name.c_str());
   ImGui::PopFont();
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   ImGui::TextDisabled("%s · %s", std::string(roleLabel(game.role)).c_str(),
                       std::string(archetypeLabel(archetypeFor(*game.you))).c_str());
   ImGui::PopFont();
   ImGui::EndGroup();
 
   ImGui::Spacing();
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   ImGui::TextDisabled("Your items");
   ImGui::PopFont();
   itemRow(game.owned, dp(30), "Nothing bought yet");
   ImGui::Spacing();
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   ImGui::Checkbox("Show overlay in game", &overlayEnabled_);
   ImGui::PopFont();
   endPanel();
@@ -464,7 +466,7 @@ void App::drawEnemyPanel(const Game& game) {
 
 void App::itemRow(const std::vector<const Item*>& items, float size, const char* empty) {
   if (items.empty()) {
-    ImGui::PushFont(fonts_.small);
+    ImGui::PushFont(fonts_.caption);
     ImGui::TextDisabled("%s", empty);
     ImGui::PopFont();
     return;
@@ -528,7 +530,7 @@ void App::drawNextOptions(const Snapshot& snap) {
   float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
   std::string goldLabel = snap.goldLeft < build.totalGold ? "Gold left to full build" : "Full build";
   std::string goldText = withCommas(snap.goldLeft) + "g";
-  float blockWidth = std::max(measure(fonts_.small, goldLabel).x, measure(fonts_.big, goldText).x);
+  float blockWidth = std::max(measure(fonts_.caption, goldLabel).x, measure(fonts_.big, goldText).x);
   float top = ImGui::GetCursorPosY();
 
   if (build.nextOptions.empty()) mutedWrapped("You own every item in the build.", false);
@@ -544,22 +546,22 @@ void App::drawNextOptions(const Snapshot& snap) {
     ImGui::PopFont();
     ImGui::SameLine();
     ImGui::TextColored(rgba(color::gold), "%dg", p.item->gold);
-    ImGui::PushFont(fonts_.small);
+    ImGui::PushFont(fonts_.caption);
     ImGui::TextDisabled("%s", join(p.reasons, 2, " · ").c_str());
     ImGui::PopFont();
     ImGui::EndGroup();
     ImGui::PopID();
   }
   if (build.boots && !build.boots->owned) {
-    ImGui::PushFont(fonts_.small);
+    ImGui::PushFont(fonts_.caption);
     ImGui::TextDisabled("Boots when you can: %s (%dg)", build.boots->item->name.c_str(), build.boots->item->gold);
     ImGui::PopFont();
   }
   ImGui::PopTextWrapPos();
   float bottom = ImGui::GetCursorPosY();
 
-  ImGui::SetCursorPos({rightEdge - measure(fonts_.small, goldLabel).x, top});
-  ImGui::PushFont(fonts_.small);
+  ImGui::SetCursorPos({rightEdge - measure(fonts_.caption, goldLabel).x, top});
+  ImGui::PushFont(fonts_.caption);
   ImGui::TextDisabled("%s", goldLabel.c_str());
   ImGui::PopFont();
   ImGui::SetCursorPosX(rightEdge - measure(fonts_.big, goldText).x);
@@ -584,8 +586,8 @@ void App::drawAnalysis(const TeamAnalysis& analysis) {
   dl->AddRectFilled(p, {split, p.y + h}, u32(color::ad), r, ImDrawFlags_RoundCornersLeft);
   dl->AddRectFilled({split, p.y}, {p.x + w, p.y + h}, u32(color::ap), r, ImDrawFlags_RoundCornersRight);
   auto label = [&](const std::string& text, float x0, float x1) {
-    ImVec2 size = measure(fonts_.small, text);
-    textAt(dl, fonts_.small, {(x0 + x1 - size.x) / 2, p.y + (h - size.y) / 2}, u32(0xffffff), text);
+    ImVec2 size = measure(fonts_.caption, text);
+    textAt(dl, fonts_.caption, {(x0 + x1 - size.x) / 2, p.y + (h - size.y) / 2}, u32(0xffffff), text);
   };
   if (ad >= 12) label(std::to_string(ad) + "% AD", p.x, split);
   if (100 - ad >= 12) label(std::to_string(100 - ad) + "% AP", split, p.x + w);
@@ -603,7 +605,7 @@ void App::drawAnalysis(const TeamAnalysis& analysis) {
     ImGui::PushFont(fonts_.bold);
     ImGui::TextColored(rgba(color::goldBright), "From their items");
     ImGui::PopFont();
-    bullets(analysis.intel, fonts_.small);
+    bullets(analysis.intel, fonts_.caption);
   }
 
   struct Threat {
@@ -625,16 +627,16 @@ void App::drawAnalysis(const TeamAnalysis& analysis) {
     if (ImGui::BeginTable("threats", columns, ImGuiTableFlags_SizingStretchSame)) {
       for (const Threat& t : threats) {
         ImGui::TableNextColumn();
-        ImGui::PushFont(fonts_.small);
+        ImGui::PushFont(fonts_.caption);
         float colW = ImGui::GetContentRegionAvail().x;
         ImVec2 q = ImGui::GetCursorScreenPos();
         ImGui::TextUnformatted(t.label);
         float labelW = ImGui::GetItemRectSize().x;
         const auto& who = analysis.sourcesOf(t.need);
         std::string names = join(who, 3);
-        float namesW = measure(fonts_.small, names).x;
+        float namesW = measure(fonts_.caption, names).x;
         float x = std::max(q.x + labelW + dp(8), q.x + colW - namesW);
-        textAt(ImGui::GetWindowDrawList(), fonts_.small, {x, q.y}, u32(color::muted), names, q.x + colW);
+        textAt(ImGui::GetWindowDrawList(), fonts_.caption, {x, q.y}, u32(color::muted), names, q.x + colW);
         ImGui::PopFont();
         if (!who.empty() && ImGui::IsMouseHoveringRect(q, {q.x + colW, q.y + ImGui::GetTextLineHeight()}))
           ImGui::SetTooltip("%s", join(who, who.size()).c_str());
@@ -671,7 +673,7 @@ void App::itemTooltip(const Item& item) {
   ImGui::PopFont();
   ImGui::SameLine();
   ImGui::TextColored(rgba(color::gold), "%dg", item.gold);
-  ImGui::PushFont(fonts_.small);
+  ImGui::PushFont(fonts_.caption);
   ImGui::TextUnformatted(description(item).c_str());
   ImGui::PopFont();
   ImGui::PopTextWrapPos();
@@ -698,8 +700,8 @@ void App::itemCard(const Item& item, const std::vector<std::string>* reasons, in
     ImVec2 c = {iconMin.x + dp(2), iconMin.y + dp(2)};
     dl->AddCircleFilled(c, r, u32(color::bg));
     dl->AddCircle(c, r, u32(color::gold));
-    ImVec2 size = measure(fonts_.small, n);
-    textAt(dl, fonts_.small, {c.x - size.x / 2, c.y - size.y / 2}, u32(color::gold), n);
+    ImVec2 size = measure(fonts_.caption, n);
+    textAt(dl, fonts_.caption, {c.x - size.x / 2, c.y - size.y / 2}, u32(color::gold), n);
   }
   ImGui::SameLine(0, dp(12));
 
@@ -720,7 +722,7 @@ void App::itemCard(const Item& item, const std::vector<std::string>* reasons, in
   }
   if (reasons) {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {dp(6), dp(3)});
-    bullets(*reasons, fonts_.small);
+    bullets(*reasons, fonts_.caption);
     ImGui::PopStyleVar();
   }
   ImGui::PopTextWrapPos();
@@ -766,7 +768,7 @@ void App::heading(const char* text) {
 }
 
 void App::mutedWrapped(const std::string& text, bool small) {
-  if (small) ImGui::PushFont(fonts_.small);
+  if (small) ImGui::PushFont(fonts_.caption);
   ImGui::PushStyleColor(ImGuiCol_Text, rgba(color::muted));
   ImGui::PushTextWrapPos(0);
   ImGui::TextUnformatted(text.c_str());
@@ -786,13 +788,13 @@ void App::bullets(const std::vector<std::string>& lines, ImFont* font) {
 }
 
 void App::badge(const char* text, ImU32 bg, ImU32 fg) {
-  ImVec2 size = measure(fonts_.small, text);
+  ImVec2 size = measure(fonts_.caption, text);
   ImVec2 pad = {dp(6), dp(1)};
   ImVec2 p = ImGui::GetCursorScreenPos();
   p.y += (ImGui::GetTextLineHeight() - size.y - pad.y * 2) / 2;
   ImDrawList* dl = ImGui::GetWindowDrawList();
   dl->AddRectFilled(p, {p.x + size.x + pad.x * 2, p.y + size.y + pad.y * 2}, bg, dp(4));
-  textAt(dl, fonts_.small, {p.x + pad.x, p.y + pad.y}, fg, text);
+  textAt(dl, fonts_.caption, {p.x + pad.x, p.y + pad.y}, fg, text);
   ImGui::Dummy({size.x + pad.x * 2, ImGui::GetTextLineHeight()});
 }
 

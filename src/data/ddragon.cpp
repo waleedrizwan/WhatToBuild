@@ -18,11 +18,11 @@ namespace {
 
 const std::string BASE = "https://ddragon.leagueoflegends.com";
 
-json getJson(const std::string& url) {
+std::string getBody(const std::string& url) {
   HttpResponse res = httpGet(url);
   if (!res.error.empty()) throw std::runtime_error("Request failed (" + res.error + "): " + url);
   if (!res.ok()) throw std::runtime_error("Request failed (" + std::to_string(res.status) + "): " + url);
-  return json::parse(res.body);
+  return std::move(res.body);
 }
 
 std::vector<std::string> stringList(const json& obj, const char* key) {
@@ -35,7 +35,7 @@ std::string optString(const json& obj, const char* key) {
   return it != obj.end() && it->is_string() ? it->get<std::string>() : "";
 }
 
-std::unique_ptr<GameData> parseGameData(const std::string& version, const json& rawChampions, const json& rawItems) {
+std::unique_ptr<GameData> parseData(const std::string& version, const json& rawChampions, const json& rawItems) {
   auto data = std::make_unique<GameData>();
   data->version = version;
 
@@ -138,11 +138,15 @@ const Item* GameData::itemById(const std::string& id) const {
 }
 
 std::unique_ptr<GameData> loadGameData() {
-  json versions = getJson(BASE + "/api/versions.json");
-  std::string version = versions.at(0).get<std::string>();
-  auto champions = std::async(std::launch::async, getJson, BASE + "/cdn/" + version + "/data/en_US/champion.json");
-  json items = getJson(BASE + "/cdn/" + version + "/data/en_US/item.json");
-  return parseGameData(version, champions.get().at("data"), items.at("data"));
+  std::string version = json::parse(getBody(BASE + "/api/versions.json")).at(0).get<std::string>();
+  auto champions = std::async(std::launch::async, getBody, BASE + "/cdn/" + version + "/data/en_US/champion.json");
+  std::string items = getBody(BASE + "/cdn/" + version + "/data/en_US/item.json");
+  return parseGameData(version, champions.get(), items);
+}
+
+std::unique_ptr<GameData> parseGameData(const std::string& version, const std::string& championJson,
+                                        const std::string& itemJson) {
+  return parseData(version, json::parse(championJson).at("data"), json::parse(itemJson).at("data"));
 }
 
 bool isTrackableItem(const Item& item) {

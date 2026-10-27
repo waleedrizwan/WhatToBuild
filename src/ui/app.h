@@ -21,7 +21,7 @@
 
 struct Fonts {
   ImFont* body = nullptr;
-  ImFont* small = nullptr;
+  ImFont* caption = nullptr;  // not "small": <windows.h> defines that as a macro
   ImFont* bold = nullptr;
   ImFont* heading = nullptr;
   ImFont* title = nullptr;

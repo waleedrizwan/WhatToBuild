@@ -8,6 +8,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+if(WIN32)
+  add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+endif()
+
 include(FetchContent)
 
 FetchContent_Declare(json
@@ -17,6 +21,10 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+# Match GLFW's MSVC runtime to ours when building a fully static Windows exe.
+if(MSVC AND CMAKE_MSVC_RUNTIME_LIBRARY AND NOT CMAKE_MSVC_RUNTIME_LIBRARY MATCHES "DLL")
+  set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE)
+endif()
 FetchContent_Declare(glfw
   URL https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip)
 
@@ -62,7 +70,12 @@ set_target_properties(tolleagle PROPERTIES
   OUTPUT_NAME $<IF:$<PLATFORM_ID:Darwin>,Tolleagle,tolleagle>
   MACOSX_BUNDLE_BUNDLE_NAME Tolleagle
   MACOSX_BUNDLE_GUI_IDENTIFIER com.tolleagle.app
-  MACOSX_BUNDLE_SHORT_VERSION_STRING 0.2.0)
+  MACOSX_BUNDLE_SHORT_VERSION_STRING 0.2.0
+  WIN32_EXECUTABLE TRUE)  # no console window on Windows
+if(MSVC)
+  target_link_options(tolleagle PRIVATE /ENTRY:mainCRTStartup)  # keep main() as the entry point
+endif()
+
 target_include_directories(tolleagle PRIVATE third_party)
 target_link_libraries(tolleagle PRIVATE tolleagle_core imgui)
 if(APPLE)
@@ -75,4 +88,24 @@ target_link_libraries(tolleagle-smoke PRIVATE tolleagle_core)
 if(NOT WIN32)
   add_executable(tolleagle-mock-live tools/mock_live_client.cpp)
   target_link_libraries(tolleagle-mock-live PRIVATE nlohmann_json::nlohmann_json)
+endif()
+
+# --- Unit tests (offline; see tests/fixture.h) ---
+option(TOLLEAGLE_BUILD_TESTS "Build the unit tests" ON)
+if(TOLLEAGLE_BUILD_TESTS)
+  enable_testing()
+  FetchContent_Declare(googletest
+    URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.tar.gz)
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+  set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+
+  add_executable(tolleagle-tests
+    tests/ddragon_test.cpp
+    tests/champions_test.cpp
+    tests/engine_test.cpp
+    tests/live_client_test.cpp)
+  target_link_libraries(tolleagle-tests PRIVATE tolleagle_core nlohmann_json::nlohmann_json GTest::gtest_main)
+  include(GoogleTest)
+  gtest_discover_tests(tolleagle-tests)
 endif()

@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev libgl-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev
+
+      # A fully static curl, so the Windows exe runs without any DLLs next to it.
+      - name: Install curl (Windows)
+        if: runner.os == 'Windows'
+        run: vcpkg install curl:x64-windows-static
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -S . -B build
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>'
+
+      - name: Configure
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGLFW_BUILD_WAYLAND=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Upload Windows app
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tolleagle-windows
+          path: build/Release/tolleagle.exe
+
+      - name: Zip macOS app
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent build/Tolleagle.app Tolleagle-macos.zip
+
+      - name: Upload macOS app
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tolleagle-macos
+          path: Tolleagle-macos.zip
