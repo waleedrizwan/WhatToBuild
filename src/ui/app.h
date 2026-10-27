@@ -7,6 +7,7 @@
 #include <functional>
 #include <future>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -41,7 +42,14 @@ class App {
   App(const App&) = delete;
   App& operator=(const App&) = delete;
 
+  /** Width of the overlay's contents before UI scaling. */
+  static constexpr float OVERLAY_WIDTH = 300;
+
   void frame();
+  /** True while a game is connected and the overlay is switched on. */
+  bool wantsOverlay() const;
+  /** The overlay's contents; called inside the overlay's own ImGui frame, after frame(). */
+  void drawOverlay();
 
  private:
   enum class CardStatus { None, Owned, Next };
@@ -56,12 +64,24 @@ class App {
   };
   Game resolve(const LiveGame& live) const;
 
+  /** Everything derived from the latest poll, shared by the main window and the overlay. */
+  struct Snapshot {
+    Game game;
+    TeamAnalysis analysis;
+    Build build;
+    /** Index into build.core of the first item you don't own yet, or -1. */
+    int nextCore = -1;
+    int goldLeft = 0;
+  };
+  void refresh();
+
   void drawHeader();
   void drawWaiting(const LiveStatus& status);
   void drawStatusLine(const LiveStatus& status);
   void drawYouPanel(const Game& game, const LiveStatus& status);
   void drawEnemyPanel(const Game& game);
-  void drawResults(const Game& game, const TeamAnalysis& analysis);
+  void drawResults(const Snapshot& snap);
+  void drawNextOptions(const Snapshot& snap);
   void drawAnalysis(const TeamAnalysis& analysis);
 
   void itemCard(const Item& item, const std::vector<std::string>* reasons, int index, CardStatus status);
@@ -89,6 +109,10 @@ class App {
   std::unique_ptr<GameData> data_;
   std::string error_;
   std::unordered_map<std::string, std::string> descriptions_;
+
+  LiveStatus status_;
+  std::optional<Snapshot> snapshot_;
+  bool overlayEnabled_ = true;
 
   IconCache icons_;
   LivePoller live_;  // after data_, so it stops before the data it reads goes away

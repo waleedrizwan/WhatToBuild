@@ -56,7 +56,8 @@ find_package(Threads REQUIRED)
 target_link_libraries(tolleagle_core PUBLIC Threads::Threads)
 
 # A .app bundle on macOS, so it can live in /Applications and be opened from Finder.
-add_executable(tolleagle MACOSX_BUNDLE src/main.cpp src/ui/app.cpp src/ui/icons.cpp)
+add_executable(tolleagle MACOSX_BUNDLE src/main.cpp src/ui/app.cpp src/ui/icons.cpp src/ui/overlay.cpp)
+
 set_target_properties(tolleagle PROPERTIES
   OUTPUT_NAME $<IF:$<PLATFORM_ID:Darwin>,Tolleagle,tolleagle>
   MACOSX_BUNDLE_BUNDLE_NAME Tolleagle

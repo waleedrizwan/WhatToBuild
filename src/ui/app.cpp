@@ -215,26 +215,24 @@ void App::frame() {
     return;
   }
 
-  LiveStatus status = live_.status();
+  refresh();
+  const LiveStatus& status = status_;
   float avail = ImGui::GetContentRegionAvail().x;
   float pageWidth = std::min(avail, dp(1200));
   ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - pageWidth) / 2);
   ImGui::BeginChild("page", {pageWidth, 0});
   drawHeader();
 
-  Game game;
-  if (status.state == LiveStatus::State::Connected) game = resolve(status.game);
-  if (!game.you) {
+  if (!snapshot_) {
     drawWaiting(status);
   } else {
-    TeamAnalysis analysis = analyzeEnemies(game.enemies, game.laneOpponentId);
     ImGui::BeginChild("game", {dp(340), 0});
-    drawYouPanel(game, status);
-    drawEnemyPanel(game);
+    drawYouPanel(snapshot_->game, status);
+    drawEnemyPanel(snapshot_->game);
     ImGui::EndChild();
     ImGui::SameLine(0, dp(20));
     ImGui::BeginChild("results", {0, 0});
-    drawResults(game, analysis);
+    drawResults(*snapshot_);
     ImGui::PushTextWrapPos(0);
     ImGui::PushFont(fonts_.small);
     ImGui::TextDisabled(
@@ -246,6 +244,84 @@ void App::frame() {
   }
   ImGui::EndChild();
   ImGui::End();
+}
+
+void App::refresh() {
+  status_ = live_.status();
+  snapshot_.reset();
+  if (status_.state != LiveStatus::State::Connected) return;
+  Game game = resolve(status_.game);
+  if (!game.you) return;
+  Snapshot& snap = snapshot_.emplace();
+  snap.analysis = analyzeEnemies(game.enemies, game.laneOpponentId);
+  snap.build = recommendBuild(*data_, *game.you, archetypeFor(*game.you), game.role, snap.analysis, game.owned);
+  snap.game = std::move(game);
+  int ownedGold = 0;
+  if (snap.build.boots && snap.build.boots->owned) ownedGold += snap.build.boots->item->gold;
+  for (std::size_t i = 0; i < snap.build.core.size(); i++) {
+    const Pick& p = snap.build.core[i];
+    if (p.owned) ownedGold += p.item->gold;
+    else if (snap.nextCore < 0) snap.nextCore = static_cast<int>(i);
+  }
+  snap.goldLeft = snap.build.totalGold - ownedGold;
+}
+
+bool App::wantsOverlay() const { return overlayEnabled_ && snapshot_.has_value(); }
+
+void App::drawOverlay() {
+  if (!snapshot_) return;
+  const Snapshot& snap = *snapshot_;
+  const Build& build = snap.build;
+  float width = dp(OVERLAY_WIDTH);
+  ImGui::PushTextWrapPos(width);
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+
+  // Title row: app name + game clock, gold left on the right.
+  ImGui::PushFont(fonts_.heading);
+  ImGui::TextColored(rgba(color::gold), "TOLLEAGLE");
+  ImGui::PopFont();
+  ImGui::SameLine();
+  ImGui::PushFont(fonts_.small);
+  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + dp(1));
+  ImGui::TextDisabled("%s", formatGameTime(status_.game.gameTime).c_str());
+  std::string gold = withCommas(snap.goldLeft) + "g left";
+  ImGui::SameLine(width - measure(fonts_.small, gold).x);
+  ImGui::TextColored(rgba(color::gold), "%s", gold.c_str());
+  ImGui::PopFont();
+  ImGui::Dummy({width, dp(2)});
+
+  ImGui::PushFont(fonts_.small);
+  ImGui::TextDisabled(build.nextOptions.empty() ? "Your build is complete." : "Options for your next item");
+  ImGui::PopFont();
+  for (const Pick& p : build.nextOptions) {
+    float s = dp(30);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    drawIcon(dl, p.item->image, pos, {pos.x + s, pos.y + s}, dp(4));
+    ImGui::Dummy({s, s});
+    ImGui::SameLine(0, dp(8));
+    ImGui::BeginGroup();
+    ImGui::PushFont(fonts_.bold);
+    ImGui::TextUnformatted(p.item->name.c_str());
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::TextColored(rgba(color::gold), "%dg", p.item->gold);
+    if (!p.reasons.empty()) {
+      ImGui::PushFont(fonts_.small);
+      ImGui::TextDisabled("%s", p.reasons.front().c_str());
+      ImGui::PopFont();
+    }
+    ImGui::EndGroup();
+  }
+
+  ImGui::PushFont(fonts_.small);
+  if (build.boots && !build.boots->owned)
+    ImGui::TextDisabled("Boots: %s (%dg)", build.boots->item->name.c_str(), build.boots->item->gold);
+  std::vector<std::string> threats;
+  for (const auto& [need, label] : THREAT_LABELS)
+    if (snap.analysis.need(need) >= 0.6) threats.push_back(label);
+  if (!threats.empty()) ImGui::TextDisabled("Watch for: %s", join(threats, 3).c_str());
+  ImGui::PopFont();
+  ImGui::PopTextWrapPos();
 }
 
 App::Game App::resolve(const LiveGame& live) const {
@@ -350,6 +426,10 @@ void App::drawYouPanel(const Game& game, const LiveStatus& status) {
   ImGui::TextDisabled("Your items");
   ImGui::PopFont();
   itemRow(game.owned, dp(30), "Nothing bought yet");
+  ImGui::Spacing();
+  ImGui::PushFont(fonts_.small);
+  ImGui::Checkbox("Show overlay in game", &overlayEnabled_);
+  ImGui::PopFont();
   endPanel();
 }
 
@@ -397,66 +477,13 @@ void App::itemRow(const std::vector<const Item*>& items, float size, const char*
   }
 }
 
-void App::drawResults(const Game& game, const TeamAnalysis& analysis) {
-  Archetype archetype = archetypeFor(*game.you);
-  Build build = recommendBuild(*data_, *game.you, archetype, game.role, analysis, game.owned);
+void App::drawResults(const Snapshot& snap) {
+  const Game& game = snap.game;
+  const TeamAnalysis& analysis = snap.analysis;
+  const Build& build = snap.build;
+  const Pick* nextCore = snap.nextCore >= 0 ? &build.core[snap.nextCore] : nullptr;
 
-  const Pick* nextBuy = nullptr;
-  int ownedGold = 0;
-  if (build.boots) {
-    if (build.boots->owned) ownedGold += build.boots->item->gold;
-    else nextBuy = &*build.boots;
-  }
-  for (const Pick& p : build.core) {
-    if (p.owned) ownedGold += p.item->gold;
-    else if (!nextBuy) nextBuy = &p;
-  }
-  int goldLeft = build.totalGold - ownedGold;
-
-  // What to buy next, front and center.
-  beginPanel("next", nullptr, nextBuy ? u32(color::accent, 0.6f) : 0);
-  {
-    float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
-    std::string goldLabel = goldLeft < build.totalGold ? "Gold left to full build" : "Full build";
-    std::string goldText = withCommas(goldLeft) + "g";
-    float blockWidth = std::max(measure(fonts_.small, goldLabel).x, measure(fonts_.big, goldText).x);
-    float top = ImGui::GetCursorPosY();
-
-    float s = dp(56);
-    ImVec2 p = ImGui::GetCursorScreenPos();
-    if (nextBuy) {
-      drawIcon(ImGui::GetWindowDrawList(), nextBuy->item->image, p, {p.x + s, p.y + s}, dp(8));
-      ImGui::GetWindowDrawList()->AddRect(p, {p.x + s, p.y + s}, u32(color::accent), dp(8), 0, dp(2));
-    }
-    ImGui::Dummy({nextBuy ? s : 0, s});
-    ImGui::SameLine(0, nextBuy ? dp(14) : 0);
-    ImGui::BeginGroup();
-    ImGui::PushFont(fonts_.small);
-    ImGui::TextColored(rgba(color::accent), "%s", nextBuy ? "BUY NEXT" : "BUILD COMPLETE");
-    ImGui::PopFont();
-    ImGui::PushFont(fonts_.big);
-    ImGui::TextColored(rgba(color::goldBright), "%s",
-                       nextBuy ? (nextBuy->item->name + "  " + std::to_string(nextBuy->item->gold) + "g").c_str()
-                               : "You own every item in the build");
-    ImGui::PopFont();
-    if (nextBuy && !nextBuy->reasons.empty()) {
-      ImGui::PushTextWrapPos(rightEdge - blockWidth - dp(16));
-      ImGui::TextDisabled("%s", nextBuy->reasons.front().c_str());
-      ImGui::PopTextWrapPos();
-    }
-    ImGui::EndGroup();
-
-    ImGui::SetCursorPos({rightEdge - measure(fonts_.small, goldLabel).x, top + dp(4)});
-    ImGui::PushFont(fonts_.small);
-    ImGui::TextDisabled("%s", goldLabel.c_str());
-    ImGui::PopFont();
-    ImGui::SetCursorPosX(rightEdge - measure(fonts_.big, goldText).x);
-    ImGui::PushFont(fonts_.big);
-    ImGui::TextColored(rgba(color::gold), "%s", goldText.c_str());
-    ImGui::PopFont();
-    ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), top + s + ImGui::GetStyle().ItemSpacing.y));
-  }
-  endPanel();
+  drawNextOptions(snap);
 
   if (!analysis.profiles.empty()) drawAnalysis(analysis);
 
@@ -474,7 +501,7 @@ void App::drawResults(const Game& game, const TeamAnalysis& analysis) {
 
   beginPanel("build", "Build order");
   auto statusOf = [&](const Pick& p) {
-    return p.owned ? CardStatus::Owned : &p == nextBuy ? CardStatus::Next : CardStatus::None;
+    return p.owned ? CardStatus::Owned : &p == nextCore ? CardStatus::Next : CardStatus::None;
   };
   if (build.boots) itemCard(*build.boots->item, &build.boots->reasons, 0, statusOf(*build.boots));
   for (std::size_t i = 0; i < build.core.size(); i++)
@@ -493,6 +520,54 @@ void App::drawResults(const Game& game, const TeamAnalysis& analysis) {
     bullets(build.notes, fonts_.body);
     endPanel();
   }
+}
+
+void App::drawNextOptions(const Snapshot& snap) {
+  const Build& build = snap.build;
+  beginPanel("next", "Options for your next item", build.nextOptions.empty() ? 0 : u32(color::accent, 0.6f));
+  float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+  std::string goldLabel = snap.goldLeft < build.totalGold ? "Gold left to full build" : "Full build";
+  std::string goldText = withCommas(snap.goldLeft) + "g";
+  float blockWidth = std::max(measure(fonts_.small, goldLabel).x, measure(fonts_.big, goldText).x);
+  float top = ImGui::GetCursorPosY();
+
+  if (build.nextOptions.empty()) mutedWrapped("You own every item in the build.", false);
+  ImGui::PushTextWrapPos(rightEdge - blockWidth - dp(16));
+  for (std::size_t i = 0; i < build.nextOptions.size(); i++) {
+    const Pick& p = build.nextOptions[i];
+    ImGui::PushID(static_cast<int>(i));
+    itemIcon(*p.item, dp(40));
+    ImGui::SameLine(0, dp(12));
+    ImGui::BeginGroup();
+    ImGui::PushFont(fonts_.bold);
+    ImGui::TextUnformatted(p.item->name.c_str());
+    ImGui::PopFont();
+    ImGui::SameLine();
+    ImGui::TextColored(rgba(color::gold), "%dg", p.item->gold);
+    ImGui::PushFont(fonts_.small);
+    ImGui::TextDisabled("%s", join(p.reasons, 2, " · ").c_str());
+    ImGui::PopFont();
+    ImGui::EndGroup();
+    ImGui::PopID();
+  }
+  if (build.boots && !build.boots->owned) {
+    ImGui::PushFont(fonts_.small);
+    ImGui::TextDisabled("Boots when you can: %s (%dg)", build.boots->item->name.c_str(), build.boots->item->gold);
+    ImGui::PopFont();
+  }
+  ImGui::PopTextWrapPos();
+  float bottom = ImGui::GetCursorPosY();
+
+  ImGui::SetCursorPos({rightEdge - measure(fonts_.small, goldLabel).x, top});
+  ImGui::PushFont(fonts_.small);
+  ImGui::TextDisabled("%s", goldLabel.c_str());
+  ImGui::PopFont();
+  ImGui::SetCursorPosX(rightEdge - measure(fonts_.big, goldText).x);
+  ImGui::PushFont(fonts_.big);
+  ImGui::TextColored(rgba(color::gold), "%s", goldText.c_str());
+  ImGui::PopFont();
+  ImGui::SetCursorPosY(std::max(ImGui::GetCursorPosY(), bottom));
+  endPanel();
 }
 
 void App::drawAnalysis(const TeamAnalysis& analysis) {
@@ -638,7 +713,7 @@ void App::itemCard(const Item& item, const std::vector<std::string>* reasons, in
   ImGui::TextColored(rgba(color::gold), "%dg", item.gold);
   if (status == CardStatus::Next) {
     ImGui::SameLine();
-    badge("BUY NEXT", u32(color::accent), u32(color::bg));
+    badge("NEXT SLOT", u32(color::accent), u32(color::bg));
   } else if (status == CardStatus::Owned) {
     ImGui::SameLine();
     badge("OWNED", u32(color::border), u32(color::muted));

@@ -234,21 +234,33 @@ Build recommendBuild(const GameData& data, const Champion& champion, Archetype a
     if (std::string g = groupOf(item->name); !g.empty()) usedGroups.insert(g);
   }
 
-  for (int slot = static_cast<int>(core.size()); slot < CORE_SLOTS; slot++) {
-    std::optional<Pick> best;
-    const Candidate* bestCandidate = nullptr;
+  constexpr std::size_t NEXT_OPTIONS = 3;
+  std::vector<Pick> nextOptions;
+  const int firstOpenSlot = static_cast<int>(core.size());
+  for (int slot = firstOpenSlot; slot < CORE_SLOTS; slot++) {
+    std::vector<std::pair<Pick, const Candidate*>> scored;
     for (const Candidate& c : candidates) {
       if (used.contains(c.item->name) || (!c.group.empty() && usedGroups.contains(c.group))) continue;
-      Pick p = scoreCandidate(c, slot, analysis, archetype);
-      if (!best || p.score > best->score) {
-        best = std::move(p);
-        bestCandidate = &c;
+      scored.emplace_back(scoreCandidate(c, slot, analysis, archetype), &c);
+    }
+    if (scored.empty()) break;
+    // Stable, so ties keep table order.
+    std::stable_sort(scored.begin(), scored.end(),
+                     [](const auto& a, const auto& b) { return a.first.score > b.first.score; });
+
+    if (slot == firstOpenSlot) {
+      std::unordered_set<std::string> optionGroups;
+      for (const auto& [pick, c] : scored) {
+        if (nextOptions.size() == NEXT_OPTIONS) break;
+        if (!c->group.empty() && !optionGroups.insert(c->group).second) continue;
+        nextOptions.push_back(pick);
       }
     }
-    if (!best) break;
-    used.insert(best->item->name);
+
+    auto& [best, bestCandidate] = scored.front();
+    used.insert(best.item->name);
     if (!bestCandidate->group.empty()) usedGroups.insert(bestCandidate->group);
-    core.push_back(std::move(*best));
+    core.push_back(std::move(best));
   }
 
   // Situational: items that answer the comp better than they fit generically.
@@ -277,6 +289,7 @@ Build recommendBuild(const GameData& data, const Champion& champion, Archetype a
       .starter = pickStarter(data, champion, archetype, role, analysis),
       .boots = std::move(boots),
       .core = std::move(core),
+      .nextOptions = std::move(nextOptions),
       .situational = std::move(situational),
       .notes = std::move(notes),
       .totalGold = totalGold,

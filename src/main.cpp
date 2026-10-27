@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "ui/app.h"
+#include "ui/overlay.h"
 
 int main() {
   glfwSetErrorCallback([](int code, const char* message) { std::fprintf(stderr, "GLFW error %d: %s\n", code, message); });
@@ -46,6 +47,7 @@ int main() {
 
   {
     App app(fonts, uiScale, [] { glfwPostEmptyEvent(); });
+    Overlay overlay(window, framebufferScale, App::OVERLAY_WIDTH * uiScale);
     while (!glfwWindowShouldClose(window)) {
       // Sleep until input arrives or a background download/poll finishes.
       glfwWaitEventsTimeout(0.5);
@@ -62,8 +64,10 @@ int main() {
       glClear(GL_COLOR_BUFFER_BIT);
       ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
       glfwSwapBuffers(window);
+
+      overlay.frame(app.wantsOverlay(), [&] { app.drawOverlay(); });
     }
-  }  // App (and its GL textures) go away while the context still exists
+  }  // App, overlay and GL textures go away while the main context still exists
 
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();

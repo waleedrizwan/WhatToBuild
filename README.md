@@ -1,6 +1,6 @@
 # Tolleagle
 
-A matchup-aware League of Legends item build advisor. It's a native C++ desktop app. Start it, start a match, and it reads everything from the game: your champion, role and items, plus the enemy team and what they've bought. Then it tells you what to buy next. There's nothing to enter.
+A matchup-aware League of Legends item build advisor. It's a native C++ desktop app. Start it, start a match, and it reads everything from the game: your champion, role and items, plus the enemy team and what they've bought. It then shows your best options for the next item, both in its window and in a small overlay on top of the game. There's nothing to enter.
 
 ```
  LEAGUE GAME CLIENT (while a match runs)       RIOT DATA (no API key)
@@ -31,9 +31,9 @@ A matchup-aware League of Legends item build advisor. It's a native C++ desktop 
                              └──────────────────────┬──────────────────────┘
                                                     ▼
                              ┌─────────────────────────────────────────────┐
-                             │ 3. YOUR BUILD                     ui/app    │
-                             │   BUY NEXT · Boots · Items 1-5              │
-                             │   marked Owned / Buy next, each with "why"  │
+                             │ 3. YOUR BUILD          ui/app · ui/overlay  │
+                             │   next-item options · Boots · Items 1-5     │
+                             │   marked Owned / Next slot, each with "why" │
                              │   + situational swaps · matchup tips        │
                              └─────────────────────────────────────────────┘
 ```
@@ -60,7 +60,13 @@ cmake --build build -j
 open build/Tolleagle.app
 ```
 
-Leave it open next to the game. It shows "Waiting for a game" until a match starts, then fills in by itself and updates every 5 seconds as items are bought.
+Leave it running. It shows "Waiting for a game" until a match starts, then fills in by itself and updates every 5 seconds as items are bought.
+
+### In-game overlay
+
+While a match is running, a small card sits on the right edge of your screen. It shows the top three options for your next item, gold left to the full build, and the enemy team's biggest threats. Clicks pass straight through it to the game, and it hides when the game ends. You can turn it off with **Show overlay in game** in the main window.
+
+The overlay is an ordinary always-on-top window. Nothing is injected into the game, so League has to run in **Borderless** or **Windowed** mode (Settings → Video → Window Mode) for the overlay to show above it.
 
 ### Without a real match
 

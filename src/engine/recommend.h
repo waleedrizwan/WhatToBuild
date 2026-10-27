@@ -21,6 +21,8 @@ struct Build {
   std::vector<const Item*> starter;
   std::optional<Pick> boots;
   std::vector<Pick> core;
+  /** The best few choices for your next open item slot, each from a different unique-passive group. */
+  std::vector<Pick> nextOptions;
   std::vector<Pick> situational;
   std::vector<std::string> notes;
   int totalGold = 0;
